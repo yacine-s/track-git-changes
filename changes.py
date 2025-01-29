@@ -4,13 +4,14 @@ import os
 import subprocess
 import argparse
 from collections import defaultdict
-def get_commit_touch_counts(repo_path):
+def get_commit_touch_counts(repo_path, days=None):
     """
     Returns a dictionary mapping filename -> number of commits that touched the file.
     It does this by running 'git log --pretty=format: --name-only', which lists
     every file changed in each commit (without commit messages).
     
     :param repo_path: Path to the git repository
+    :param days: Number of days to look back in history (None for entire history)
     """
     # Verify the path exists and is a directory
     if not os.path.isdir(repo_path):
@@ -28,12 +29,13 @@ def get_commit_touch_counts(repo_path):
         if not os.path.isdir('.git'):
             print(f"Error: {repo_path} is not a git repository")
             return {}
+        # Build git command with optional time filter
+        git_cmd = ["git", "log", "--pretty=format:", "--name-only"]
+        if days is not None:
+            git_cmd.extend(["--since", f"{days}.days.ago"])
             
-        # Run the git command to list all changed files (across entire history)
-        output = subprocess.check_output(
-            ["git", "log", "--pretty=format:", "--name-only"],
-            universal_newlines=True
-        )
+        # Run the git command
+        output = subprocess.check_output(git_cmd, universal_newlines=True)
     except subprocess.CalledProcessError as e:
         print("Error running git log:", e)
         return {}
@@ -160,13 +162,15 @@ def main():
     parser = argparse.ArgumentParser(description='Display git repository changes tree')
     parser.add_argument('path', nargs='?', default='.',
                       help='Path to the repository (default: current directory)')
+    parser.add_argument('--days', type=int,
+                      help='Number of days to look back in history (default: entire history)')
     args = parser.parse_args()
 
     # Convert to absolute path
     repo_path = os.path.abspath(args.path)
 
     # 1) Count how many commits touched each file
-    counts = get_commit_touch_counts(repo_path)
+    counts = get_commit_touch_counts(repo_path, args.days)
 
     # Only proceed if we got valid data
     if counts:
