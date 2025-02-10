@@ -4,13 +4,14 @@ import os
 import subprocess
 import argparse
 from collections import defaultdict
-def get_commit_touch_counts(repo_path, days=None):
+def get_commit_touch_counts(repo_path, relative_path=None, days=None):
     """
     Returns a dictionary mapping filename -> number of commits that touched the file.
     It does this by running 'git log --pretty=format: --name-only', which lists
     every file changed in each commit (without commit messages).
     
     :param repo_path: Path to the git repository
+    :param relative_path: Relative path within the repository to filter files
     :param days: Number of days to look back in history (None for entire history)
     """
     # Verify the path exists and is a directory
@@ -54,7 +55,16 @@ def get_commit_touch_counts(repo_path, days=None):
         # Skip empty lines
         if not file_path:
             continue
-        changes_count[file_path] += 1
+            
+        # If relative_path is specified, only include files under that path
+        if relative_path:
+            if not file_path.startswith(relative_path):
+                continue
+            # Remove the relative path prefix to show proper tree structure
+            file_path = file_path[len(relative_path):].lstrip('/')
+            
+        if file_path:  # Only count if there's still a path after stripping
+            changes_count[file_path] += 1
     
     return changes_count
 
@@ -162,6 +172,8 @@ def main():
     parser = argparse.ArgumentParser(description='Display git repository changes tree')
     parser.add_argument('path', nargs='?', default='.',
                       help='Path to the repository (default: current directory)')
+    parser.add_argument('--relative-path',
+                      help='Relative path within the repository to show changes for')
     parser.add_argument('--days', type=int,
                       help='Number of days to look back in history (default: entire history)')
     args = parser.parse_args()
@@ -170,7 +182,7 @@ def main():
     repo_path = os.path.abspath(args.path)
 
     # 1) Count how many commits touched each file
-    counts = get_commit_touch_counts(repo_path, args.days)
+    counts = get_commit_touch_counts(repo_path, args.relative_path, args.days)
 
     # Only proceed if we got valid data
     if counts:
@@ -178,7 +190,10 @@ def main():
         repo_tree = build_repo_tree(".", counts)
 
         # 3) Print out the tree
-        print(f"Changes Tree for {repo_path}:")
+        if args.relative_path:
+            print(f"Changes Tree for \n{repo_path}/{args.relative_path}:")
+        else:
+            print(f"Changes Tree for {repo_path}:")
         print_tree(repo_tree, prefix="", is_last=True)
     else:
         print("No changes to display")
